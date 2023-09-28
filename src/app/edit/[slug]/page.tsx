@@ -1,18 +1,26 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { use, useCallback, useEffect, useState } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Icon } from "@iconify/react";
+import { useRouter } from "next/navigation";
 
-const EditPage = () => {
-  const [value, setValue] = useState("");
-  const [file, setFile] = useState();
+const EditPage = ({ params }: { params: { slug: string } }) => {
+  const router = useRouter();
+
+  const [file, setFile] = useState("");
+  const [imageBlog, setImageBlog] = useState("");
+  const [category, setCategory] = useState("");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tag, setTag] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   function handleChange(e: any) {
-    setFile(URL.createObjectURL(e.target.files[0]));
+    setImageBlog(URL.createObjectURL(e.target.files[0]));
+    setFile(e.target.files[0]);
   }
 
   // remove indexed value
@@ -24,7 +32,7 @@ const EditPage = () => {
     setTags(tagsTemp);
   };
 
-  const addTag = () => {
+  const addTag = async () => {
     if (tag) {
       if (tags.indexOf(tag) !== -1) {
         alert(tag + " sudah ada");
@@ -75,13 +83,79 @@ const EditPage = () => {
     "formula",
   ];
 
+  useEffect(() => {
+    fetch("http://localhost:3000/api/blogs/" + params.slug)
+      .then((res) => res.json())
+      .then((data) => {
+        setImageBlog(data.blog.imageBlog);
+        setCategory(data.blog.category);
+        setTitle(data.blog.title);
+        setContent(data.blog.content);
+        setTags(data.blog.tags);
+        setIsLoading(false);
+      });
+  }, []);
+
+  const editBlog = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!category) {
+      alert("Please select a category");
+      return;
+    } else if (!content) {
+      alert("Please fill the content");
+      return;
+    }
+    try {
+      setIsLoading(true);
+
+      const data = new FormData();
+      if (file) {
+        data.set("file", file);
+      }
+      data.set("category", category);
+      data.set("title", title);
+      data.set("content", content);
+      data.set("tags", JSON.stringify(tags));
+
+      const response = await fetch(
+        "http://localhost:3000/api/blogs/" + params.slug,
+        {
+          method: "PUT",
+          body: data,
+        }
+      );
+
+      setIsLoading(false);
+
+      if (!response.ok) {
+        alert(response.statusText);
+      }
+
+      const dataResponse = await response.json();
+
+      if (dataResponse.status == 200) {
+        alert("Blog has been updated");
+        router.push("/dashboard");
+      } else {
+        alert(dataResponse.error);
+      }
+    } catch (error) {
+      alert(error);
+    }
+  };
+
   return (
     <section className="bg-white">
       <div className="px-4 mx-auto">
-        <h2 className="mb-4 text-xl font-bold text-gray-900 ">
-          Add a new blog
-        </h2>
-        <form action="#">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-x-2 text-red-400 mb-4 font-medium"
+        >
+          <Icon icon="ep:back" />
+          Back
+        </button>
+        <h2 className="mb-4 text-xl font-bold text-gray-900 ">Edit blog</h2>
+        <form onSubmit={editBlog} encType="multipart/form-data">
           <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
             <div className="sm:col-span-2">
               <label
@@ -90,11 +164,22 @@ const EditPage = () => {
               >
                 Image
               </label>
-              <img
-                className="max-h-[510px] object-cover w-full mb-3 rounded-md"
-                src={file}
-                alt=""
-              />
+              {file !== "" ? (
+                <img
+                  className="max-h-[510px] object-cover w-full mb-3 rounded-md"
+                  src={imageBlog}
+                  alt=""
+                />
+              ) : (
+                <div>
+                  <img
+                    className="max-h-[510px] object-cover w-full mb-3 rounded-md"
+                    src={`http://localhost:3000/blog/${imageBlog}`}
+                    alt=""
+                  />
+                </div>
+              )}
+
               <input
                 id="image"
                 type="file"
@@ -111,15 +196,23 @@ const EditPage = () => {
               </label>
               <select
                 id="category"
+                required
+                onChange={(e) => setCategory(e.target.value)}
                 className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5 "
               >
-                <option disabled>
-                  Select category
+                <option disabled>Select category</option>
+                <option selected={category == "OMS"} value="OMS">
+                  Order Management System
                 </option>
-                <option value="OMS">Order Management System</option>
-                <option value="CRM">Customer Relationship Management</option>
-                <option value="OA">Office Automation</option>
-                <option value="SM">Supplier Management</option>
+                <option selected={category == "CRM"} value="CRM">
+                  Customer Relationship Management
+                </option>
+                <option selected={category == "OA"} value="OA">
+                  Office Automation
+                </option>
+                <option selected={category == "SM"} value="SM">
+                  Supplier Management
+                </option>
               </select>
             </div>
             <div className="sm:col-span-2">
@@ -130,6 +223,8 @@ const EditPage = () => {
                 Title
               </label>
               <input
+                onChange={(e) => setTitle(e.target.value)}
+                value={title}
                 type="text"
                 name="title"
                 id="title"
@@ -148,8 +243,8 @@ const EditPage = () => {
                 theme="snow"
                 modules={modules}
                 formats={formats}
-                value={value}
-                onChange={setValue}
+                value={content}
+                onChange={setContent}
               />
             </div>
             <div className="sm:col-span-2">
@@ -176,7 +271,7 @@ const EditPage = () => {
                 </button>
               </div>
               <div className=" flex flex-wrap mt-4">
-                {tags.map((tag, i) => {
+                {tags?.map((tag, i) => {
                   return (
                     <div key={i}>
                       <div className="inline-flex justify-between items-center text-gray-900 bg-white border border-gray-300 focus:outline-none  focus:ring-4 focus:ring-gray-200 font-medium rounded-lg text-sm py-2.5 mr-3 my-1.5">
@@ -197,9 +292,10 @@ const EditPage = () => {
           </div>
           <button
             type="submit"
-            className="inline-flex items-center px-5 py-2.5 mt-4 sm:mt-6 text-sm font-medium text-center text-white bg-primary-700 rounded-lg focus:ring-4 focus:ring-primary-200 hover:bg-primary-800"
+            disabled={isLoading}
+            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 mr-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
           >
-            Add product
+            {isLoading ? "Loading..." : "Update Blog"}
           </button>
         </form>
       </div>

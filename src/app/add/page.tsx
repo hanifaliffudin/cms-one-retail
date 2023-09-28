@@ -4,18 +4,23 @@ import React, { useState } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Icon } from "@iconify/react";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 const AddPage = () => {
+  const router = useRouter();
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [imagePreview, setImagePreview] = useState("");
   const [file, setFile] = useState();
-  const [category, setCategory] = useState("")
-  const [title, setTitle] = useState("")
+  const [category, setCategory] = useState("");
+  const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tag, setTag] = useState("");
 
   function handleChange(e: any) {
-    setFile(URL.createObjectURL(e.target.files[0]));
+    setImagePreview(URL.createObjectURL(e.target.files[0]));
+    setFile(e.target.files[0]);
   }
 
   // remove indexed value
@@ -78,43 +83,65 @@ const AddPage = () => {
     "formula",
   ];
 
-  const addBlog = async (e:any)=>{
+  const addBlog = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log(JSON.stringify({
-      category,
-      title,
-      content,
-      tags,
-    }))
-    const response = await fetch("http://localhost:3000/api/blogs", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        category,
-        title,
-        content,
-        tags,
-      }),
-    });
-
-    if (!response.ok) {
-      alert(response.statusText);
-    } else {
-      console.log(response)
-      // redirect("/dashboard");
+    if (!category) {
+      alert("Please select a category");
+      return;
+    } else if (!content) {
+      alert("Please fill the content");
+      return;
     }
-    // const data = await response.json();
-  }
+    if (!file) return;
+
+    try {
+      setIsLoading(true);
+
+      const data = new FormData();
+      data.set("file", file);
+      data.set("category", category);
+      data.set("title", title);
+      data.set("content", content);
+      data.set("tags", JSON.stringify(tags));
+
+      const response = await fetch("http://localhost:3000/api/blogs", {
+        method: "POST",
+        body: data,
+      });
+
+      setIsLoading(false);
+
+      if (!response.ok) {
+        alert(response.statusText);
+      }
+
+      const dataResponse = await response.json();
+
+      if (dataResponse.status == 200) {
+        alert("Blog has been saved");
+        router.push("/dashboard");
+      } else {
+        alert(dataResponse.error);
+      }
+    } catch (error) {
+      alert(error);
+    }
+  };
 
   return (
     <section className="bg-white">
       <div className="px-4 mx-auto">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-x-2 text-red-400 mb-4"
+        >
+          <Icon icon="ep:back" />
+          Back
+        </button>
         <h2 className="mb-4 text-xl font-bold text-gray-900 ">
           Add a new blog
         </h2>
-        <form onSubmit={addBlog}>
+        <form onSubmit={addBlog} encType="multipart/form-data" method="POST">
           <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
             <div className="sm:col-span-2">
               <label
@@ -125,13 +152,14 @@ const AddPage = () => {
               </label>
               <img
                 className="max-h-[510px] object-cover w-full mb-3 rounded-md"
-                src={file}
+                src={imagePreview}
                 alt=""
               />
               <input
                 id="image"
                 type="file"
                 accept="image/*"
+                required
                 onChange={handleChange}
               />
             </div>
@@ -144,10 +172,11 @@ const AddPage = () => {
               </label>
               <select
                 id="category"
-                onChange={(e)=>setCategory(e.target.value)}
+                required
+                onChange={(e) => setCategory(e.target.value)}
                 className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5 "
               >
-                <option disabled>
+                <option selected disabled>
                   Select category
                 </option>
                 <option value="OMS">Order Management System</option>
@@ -164,7 +193,7 @@ const AddPage = () => {
                 Title
               </label>
               <input
-                onChange={(e)=>setTitle(e.target.value)}
+                onChange={(e) => setTitle(e.target.value)}
                 type="text"
                 name="title"
                 id="title"
@@ -230,7 +259,13 @@ const AddPage = () => {
               </div>
             </div>
           </div>
-          <button type="submit" className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 mr-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800">Add Blog</button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 mr-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
+          >
+            {isLoading ? "Loading..." : "Add Blog"}
+          </button>
         </form>
       </div>
     </section>
